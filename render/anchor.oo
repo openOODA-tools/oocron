@@ -1,0 +1,87 @@
+// # oocron Render Subsystem Unit Tests
+//
+// Logline: Verification anchors for terminal visual rendering and JSON serialization.
+//
+// Setup: Executes themed render passes and JSON structure validations against synthetic systemd unit pairs.
+//
+// Beats:
+//   1. Verify theme palette resolution and fallback behavior.
+//   2. Verify human-readable unit pair formatting.
+//   3. Verify validation report formatting with status badges.
+//   4. Verify JSON serialization of units and validation states.
+
+import "core/cron_types.oo";
+import "core/cron_systemd.oo";
+import "core/cron_parser.oo";
+import "core/cron_demo.oo";
+import "render/cron_theme.oo";
+import "render/cron_view.oo";
+import "render/cron_json.oo";
+
+pub fn test_themes() -> Bool {
+    let mono: ThemePalette = get_theme("monochrome");
+    if mono.bold != "" {
+        return false;
+    }
+    let def_th: ThemePalette = get_theme("default");
+    if chars_len(def_th.bold) == 0 {
+        return false;
+    }
+    return true;
+}
+
+pub fn test_views() -> Bool {
+    let mono: ThemePalette = get_theme("monochrome");
+    let pair: SystemdUnitPair = transpile_cron_to_systemd("0 1 * * *", "/bin/echo 1", "test-job");
+
+    let out: String = render_unit_pair(pair, mono);
+    if !str_contains(out, "test-job.timer") {
+        return false;
+    }
+    if !str_contains(out, "test-job.service") {
+        return false;
+    }
+
+    let val: CronValidation = validate_cron_expression("0 1 * * *");
+    let rep: String = render_validation_report(val, "0 1 * * *", mono);
+    if !str_contains(rep, "[VALID]") {
+        return false;
+    }
+
+    return true;
+}
+
+pub fn test_json() -> Bool {
+    let pair: SystemdUnitPair = transpile_cron_to_systemd("0 1 * * *", "/bin/echo 1", "test-job");
+    let j: String = unit_pair_to_json(pair);
+    if !str_contains(j, "\"name\": \"test-job\"") {
+        return false;
+    }
+
+    let val: CronValidation = validate_cron_expression("0 1 * * *");
+    let vj: String = validation_to_json(val, "0 1 * * *");
+    if !str_contains(vj, "\"is_valid\": true") {
+        return false;
+    }
+
+    let demos: List[SystemdUnitPair] = build_demo_jobs();
+    let dj: String = demo_to_json(demos);
+    if !str_contains(dj, "\"tool\": \"oocron\"") {
+        return false;
+    }
+
+    return true;
+}
+
+pub fn run_render_tests() -> Bool {
+    if !test_themes() {
+        return false;
+    }
+    if !test_views() {
+        return false;
+    }
+    if !test_json() {
+        return false;
+    }
+    return true;
+}

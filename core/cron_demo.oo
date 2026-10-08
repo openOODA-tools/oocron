@@ -1,0 +1,52 @@
+// # oocron Demo Showcase & Standard Conversions
+//
+// Logline: Generates deterministic cron-to-systemd conversion demonstrations across production workloads.
+//
+// Setup: Pure synthetic conversion fixtures validating transpilation of common administrative schedules.
+//
+// Beats:
+//   1. Build multi-schedule cron job demonstration fixtures.
+//   2. Demonstrate standard daily backup conversion to systemd timer.
+//   3. Demonstrate interval 5-minute health probe conversion.
+//   4. Demonstrate weekday business hour schedule conversion.
+
+import "core/cron_types.oo";
+import "core/cron_systemd.oo";
+
+pub fn build_demo_jobs() -> List[SystemdUnitPair] {
+    let mut pairs: List[SystemdUnitPair] = list_new();
+
+    // 1. Daily 2 AM Database & Filesystem Backup
+    let p1: SystemdUnitPair = transpile_cron_to_systemd(
+        "0 2 * * *",
+        "/usr/local/bin/oobackup --vault /data/backup",
+        "backup-daily"
+    );
+    pairs = list_push(pairs, p1);
+
+    // 2. 5-Minute Container & Node Health Monitor
+    let p2: SystemdUnitPair = transpile_cron_to_systemd(
+        "*/5 * * * *",
+        "/usr/local/bin/oowatch --probe memory,cpu",
+        "node-health-watch"
+    );
+    pairs = list_push(pairs, p2);
+
+    // 3. Weekday 9 AM Security & Capability Audit
+    let p3: SystemdUnitPair = transpile_cron_to_systemd(
+        "0 9 * * 1-5",
+        "/usr/local/bin/ooaudit --enforce-strict",
+        "security-audit-weekday"
+    );
+    pairs = list_push(pairs, p3);
+
+    // 4. Monthly 1st Day Log Archive & Rotation
+    let p4: SystemdUnitPair = transpile_cron_to_systemd(
+        "@monthly",
+        "/usr/local/bin/ooarchive --rotate /var/log/app",
+        "log-rotation-monthly"
+    );
+    pairs = list_push(pairs, p4);
+
+    return pairs;
+}

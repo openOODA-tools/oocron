@@ -1,0 +1,115 @@
+// # oocron Core Verification Anchor
+//
+// Logline: Deterministic unit tests verifying cron parsing, systemd calendar transpilation, and unit synthesis.
+//
+// Setup: Pure algorithmic test execution verifying systemd-native invariants without external authority.
+//
+// Beats:
+//   1. Verify 5-field cron parsing and macro expansion.
+//   2. Verify systemd calendar string generation (step intervals, ranges).
+//   3. Verify validation error detection on malformed schedules.
+//   4. Verify declarative timer and service unit synthesis.
+
+import "core/cron_types.oo";
+import "core/cron_parser.oo";
+import "core/cron_systemd.oo";
+import "core/cron_demo.oo";
+
+pub fn test_parser_and_macros() -> Bool {
+    let s1: CronSchedule = parse_cron_expression("0 2 * * *");
+    if s1.systemd_calendar != "*-*-* 02:00:00" {
+        return false;
+    }
+
+    let s2: CronSchedule = parse_cron_expression("*/5 * * * *");
+    if s2.systemd_calendar != "*-*-* *:00/5:00" {
+        return false;
+    }
+
+    let s3: CronSchedule = parse_cron_expression("0 9 * * 1-5");
+    if s3.systemd_calendar != "Mon..Fri *-*-* 09:00:00" {
+        return false;
+    }
+
+    let s_daily: CronSchedule = parse_cron_expression("@daily");
+    if s_daily.systemd_calendar != "*-*-* 00:00:00" {
+        return false;
+    }
+
+    return true;
+}
+
+pub fn test_validation() -> Bool {
+    let v_ok: CronValidation = validate_cron_expression("30 4 1 * *");
+    if !v_ok.is_valid {
+        return false;
+    }
+
+    let v_macro: CronValidation = validate_cron_expression("@weekly");
+    if !v_macro.is_valid {
+        return false;
+    }
+
+    let v_bad: CronValidation = validate_cron_expression("10 2");
+    if v_bad.is_valid {
+        return false;
+    }
+
+    let v_bad_macro: CronValidation = validate_cron_expression("@unknown");
+    if v_bad_macro.is_valid {
+        return false;
+    }
+
+    return true;
+}
+
+pub fn test_systemd_generation() -> Bool {
+    let pair: SystemdUnitPair = transpile_cron_to_systemd(
+        "0 3 * * *",
+        "/usr/bin/backup",
+        "test-backup"
+    );
+
+    // Verify timer unit
+    if !str_contains(pair.timer_content, "[Timer]") {
+        return false;
+    }
+    if !str_contains(pair.timer_content, "OnCalendar=*-*-* 03:00:00") {
+        return false;
+    }
+    if !str_contains(pair.timer_content, "Persistent=true") {
+        return false;
+    }
+
+    // Verify service unit with GEMINI.md hardening
+    if !str_contains(pair.service_content, "[Service]") {
+        return false;
+    }
+    if !str_contains(pair.service_content, "ProtectSystem=strict") {
+        return false;
+    }
+    if !str_contains(pair.service_content, "StandardOutput=journal") {
+        return false;
+    }
+
+    // Verify demo jobs
+    let demos: List[SystemdUnitPair] = build_demo_jobs();
+    if list_len(demos) != 4 {
+        return false;
+    }
+
+    return true;
+}
+
+pub fn run_core_tests() -> Bool {
+    if !test_parser_and_macros() {
+        return false;
+    }
+    if !test_validation() {
+        return false;
+    }
+    if !test_systemd_generation() {
+        return false;
+    }
+    return true;
+}

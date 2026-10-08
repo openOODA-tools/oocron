@@ -1,0 +1,54 @@
+// # oocron Terminal View Renderer
+//
+// Logline: Formats synthesized systemd unit configurations, validation results, and demo fixtures for terminal output.
+//
+// Setup: Bridges SystemdUnitPair and CronValidation models to human-readable streams with themed styling.
+//
+// Beats:
+//   1. Format complete systemd unit pair (.timer and .service) with syntax highlights.
+//   2. Format validation reports with status badges and error diagnostics.
+//   3. Format demo conversion showcase across multiple production schedules.
+//   4. Deliver standardized section header cards.
+
+import "core/cron_types.oo";
+import "render/cron_theme.oo";
+
+pub fn render_unit_pair(pair: SystemdUnitPair, th: ThemePalette) -> String {
+    let mut out: String = "\n" + th.bold + th.primary
+        + "=== Systemd Unit Pair: " + pair.name + " ===" + th.reset + "\n\n";
+
+    out = out + th.bold + th.secondary + "# --- [Timer Unit: " + pair.timer_path + "] ---" + th.reset + "\n";
+    out = out + th.dim + pair.timer_content + th.reset + "\n";
+
+    out = out + th.bold + th.secondary + "# --- [Service Unit: " + pair.service_path + "] ---" + th.reset + "\n";
+    out = out + th.dim + pair.service_content + th.reset + "\n";
+
+    return out;
+}
+
+pub fn render_validation_report(val: CronValidation, raw_expr: String, th: ThemePalette) -> String {
+    let mut out: String = "";
+    if val.is_valid {
+        out = out + th.success + "[VALID]   " + th.reset + th.bold + raw_expr + th.reset + "\n";
+        out = out + "  systemd OnCalendar: " + th.accent + val.calendar_spec + th.reset + "\n";
+    } else {
+        out = out + th.danger + "[INVALID] " + th.reset + th.bold + raw_expr + th.reset + "\n";
+        out = out + "  Error: " + th.warning + val.error_message + th.reset + "\n";
+    }
+    return out;
+}
+
+pub fn render_demo_view(pairs: List[SystemdUnitPair], th: ThemePalette) -> String {
+    let mut out: String = "\n" + th.bold + th.primary
+        + "=== Sovereign openOODA Cron to Systemd Transpiler Showcase ===" + th.reset + "\n";
+
+    let n: Int = list_len(pairs);
+    let mut i: Int = 0;
+    while i < n {
+        let p: SystemdUnitPair = list_get(pairs, i);
+        out = out + render_unit_pair(p, th);
+        i = i + 1;
+    }
+
+    return out;
+}

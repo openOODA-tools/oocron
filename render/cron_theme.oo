@@ -1,0 +1,65 @@
+// # oocron Terminal Theming Subsystem
+//
+// Logline: Palette configurations and ANSI terminal styling primitives for systemd unit inspection.
+//
+// Setup: Pure string manipulation adhering to oote theme specifications and NO_COLOR overrides.
+//
+// Beats:
+//   1. Define ThemePalette records holding ANSI color and style sequences.
+//   2. Resolve theme palettes by name with fallback to default.
+//   3. Render visual status badges for verification states.
+//   4. Export terminal palette accessors.
+
+type ThemePalette = struct {
+    primary: String,
+    secondary: String,
+    accent: String,
+    success: String,
+    warning: String,
+    danger: String,
+    dim: String,
+    bold: String,
+    reset: String
+};
+
+pub fn get_theme(name: String) -> ThemePalette {
+    if name == "monochrome" {
+        return ThemePalette {
+            primary: "", secondary: "", accent: "", success: "",
+            warning: "", danger: "", dim: "", bold: "", reset: ""
+        };
+    }
+    if name == "ember" {
+        return ThemePalette {
+            primary: "\x1b[38;5;208m", secondary: "\x1b[38;5;214m", accent: "\x1b[38;5;220m",
+            success: "\x1b[38;5;148m", warning: "\x1b[38;5;214m", danger: "\x1b[38;5;196m",
+            dim: "\x1b[38;5;240m", bold: "\x1b[1m", reset: "\x1b[0m"
+        };
+    }
+    if name == "ocean" {
+        return ThemePalette {
+            primary: "\x1b[38;5;39m", secondary: "\x1b[38;5;75m", accent: "\x1b[38;5;45m",
+            success: "\x1b[38;5;48m", warning: "\x1b[38;5;221m", danger: "\x1b[38;5;203m",
+            dim: "\x1b[38;5;242m", bold: "\x1b[1m", reset: "\x1b[0m"
+        };
+    }
+    if name == "matrix" {
+        return ThemePalette {
+            primary: "\x1b[38;5;46m", secondary: "\x1b[38;5;40m", accent: "\x1b[38;5;82m",
+            success: "\x1b[38;5;118m", warning: "\x1b[38;5;190m", danger: "\x1b[38;5;196m",
+            dim: "\x1b[38;5;238m", bold: "\x1b[1m", reset: "\x1b[0m"
+        };
+    }
+    if name == "cyber" {
+        return ThemePalette {
+            primary: "\x1b[38;5;199m", secondary: "\x1b[38;5;51m", accent: "\x1b[38;5;213m",
+            success: "\x1b[38;5;85m", warning: "\x1b[38;5;227m", danger: "\x1b[38;5;197m",
+            dim: "\x1b[38;5;241m", bold: "\x1b[1m", reset: "\x1b[0m"
+        };
+    }
+    return ThemePalette {
+        primary: "\x1b[38;5;51m", secondary: "\x1b[38;5;39m", accent: "\x1b[38;5;141m",
+        success: "\x1b[38;5;82m", warning: "\x1b[38;5;220m", danger: "\x1b[38;5;196m",
+        dim: "\x1b[38;5;242m", bold: "\x1b[1m", reset: "\x1b[0m"
+    };
+}

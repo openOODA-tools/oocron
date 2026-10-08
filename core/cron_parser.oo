@@ -1,0 +1,174 @@
+// # oocron Schedule Expression Parser
+//
+// Logline: Parses standard 5-part cron schedules and macros into systemd calendar event specifications.
+//
+// Setup: Pure string manipulation routines validating cron syntax and generating systemd OnCalendar strings.
+//
+// Beats:
+//   1. Expand standard cron macros (@hourly, @daily, @weekly, @monthly, @reboot).
+//   2. Parse and tokenize 5-field cron timing strings (minute, hour, dom, month, dow).
+//   3. Transpile cron timing syntax to systemd.time OnCalendar event specifications.
+//   4. Validate syntax bounds and detect malformed interval patterns.
+
+import "core/cron_types.oo";
+
+pub fn split_words(text: String) -> List[String] {
+    let mut words: List[String] = list_new();
+    let n: Int = chars_len(text);
+    let mut start: Int = -1;
+    let mut i: Int = 0;
+    while i < n {
+        let ch: Int = byte_at(text, i);
+        if ch == 32 || ch == 9 || ch == 10 || ch == 13 {
+            if start >= 0 {
+                words = list_push(words, str_slice(text, start, i));
+                start = -1;
+            }
+        } else {
+            if start < 0 {
+                start = i;
+            }
+        }
+        i = i + 1;
+    }
+    if start >= 0 {
+        words = list_push(words, str_slice(text, start, n));
+    }
+    return words;
+}
+
+fn pad2(s: String) -> String {
+    if chars_len(s) == 1 {
+        return "0" + s;
+    }
+    return s;
+}
+
+fn map_dow(dow: String) -> String {
+    if dow == "*" { return ""; }
+    if dow == "0" || dow == "7" || to_lowercase(dow) == "sun" { return "Sun "; }
+    if dow == "1" || to_lowercase(dow) == "mon" { return "Mon "; }
+    if dow == "2" || to_lowercase(dow) == "tue" { return "Tue "; }
+    if dow == "3" || to_lowercase(dow) == "wed" { return "Wed "; }
+    if dow == "4" || to_lowercase(dow) == "thu" { return "Thu "; }
+    if dow == "5" || to_lowercase(dow) == "fri" { return "Fri "; }
+    if dow == "6" || to_lowercase(dow) == "sat" { return "Sat "; }
+    if dow == "1-5" { return "Mon..Fri "; }
+    if dow == "0-6" || dow == "1-7" { return ""; }
+    return dow + " ";
+}
+
+pub fn cron_to_calendar(min: String, hr: String, dom: String, mon: String, dow: String) -> String {
+    let dow_prefix: String = map_dow(dow);
+
+    // 1. Date component
+    let mon_part: String = if mon == "*" { "*" } else { pad2(mon) };
+    let dom_part: String = if dom == "*" { "*" } else { pad2(dom) };
+    let date_spec: String = if mon_part == "*" && dom_part == "*" {
+        "*-*-*"
+    } else {
+        "*-" + mon_part + "-" + dom_part
+    };
+
+    // 2. Time component
+    let mut time_spec: String = "";
+    if str_starts_with(min, "*/") {
+        let step: String = str_slice(min, 2, chars_len(min));
+        if hr == "*" {
+            time_spec = "*:00/" + step + ":00";
+        } else {
+            time_spec = pad2(hr) + ":00/" + step + ":00";
+        }
+    } else if min == "*" {
+        if hr == "*" {
+            time_spec = "*:*:00";
+        } else {
+            time_spec = pad2(hr) + ":*:00";
+        }
+    } else {
+        let min_padded: String = pad2(min);
+        let hr_padded: String = if hr == "*" { "*" } else { pad2(hr) };
+        time_spec = hr_padded + ":" + min_padded + ":00";
+    }
+
+    return dow_prefix + date_spec + " " + time_spec;
+}
+
+pub fn parse_cron_expression(expr: String) -> CronSchedule {
+    let trimmed: String = str_trim(expr);
+
+    // Macros
+    if trimmed == "@hourly" {
+        return CronSchedule { raw_expr: trimmed, minute: "0", hour: "*", dom: "*", month: "*", dow: "*", systemd_calendar: "*-*-* *:00:00", is_macro: true };
+    }
+    if trimmed == "@daily" || trimmed == "@midnight" {
+        return CronSchedule { raw_expr: trimmed, minute: "0", hour: "0", dom: "*", month: "*", dow: "*", systemd_calendar: "*-*-* 00:00:00", is_macro: true };
+    }
+    if trimmed == "@weekly" {
+        return CronSchedule { raw_expr: trimmed, minute: "0", hour: "0", dom: "*", month: "*", dow: "1", systemd_calendar: "Mon *-*-* 00:00:00", is_macro: true };
+    }
+    if trimmed == "@monthly" {
+        return CronSchedule { raw_expr: trimmed, minute: "0", hour: "0", dom: "1", month: "*", dow: "*", systemd_calendar: "*-*-01 00:00:00", is_macro: true };
+    }
+    if trimmed == "@yearly" || trimmed == "@annually" {
+        return CronSchedule { raw_expr: trimmed, minute: "0", hour: "0", dom: "1", month: "1", dow: "*", systemd_calendar: "*-01-01 00:00:00", is_macro: true };
+    }
+    if trimmed == "@reboot" {
+        return CronSchedule { raw_expr: trimmed, minute: "", hour: "", dom: "", month: "", dow: "", systemd_calendar: "OnBootSec=1m", is_macro: true };
+    }
+
+    let tokens: List[String] = split_words(trimmed);
+    let num_tokens: Int = list_len(tokens);
+
+    if num_tokens < 5 {
+        return CronSchedule {
+            raw_expr: trimmed, minute: "*", hour: "*", dom: "*", month: "*", dow: "*",
+            systemd_calendar: "*-*-* *:00:00", is_macro: false
+        };
+    }
+
+    let min_str: String = list_get(tokens, 0);
+    let hr_str: String = list_get(tokens, 1);
+    let dom_str: String = list_get(tokens, 2);
+    let mon_str: String = list_get(tokens, 3);
+    let dow_str: String = list_get(tokens, 4);
+
+    let cal: String = cron_to_calendar(min_str, hr_str, dom_str, mon_str, dow_str);
+
+    return CronSchedule {
+        raw_expr: trimmed,
+        minute: min_str,
+        hour: hr_str,
+        dom: dom_str,
+        month: mon_str,
+        dow: dow_str,
+        systemd_calendar: cal,
+        is_macro: false
+    };
+}
+
+pub fn validate_cron_expression(expr: String) -> CronValidation {
+    let trimmed: String = str_trim(expr);
+    if chars_len(trimmed) == 0 {
+        return CronValidation { is_valid: false, error_message: "Empty expression", calendar_spec: "" };
+    }
+    if str_starts_with(trimmed, "@") {
+        if trimmed == "@hourly" || trimmed == "@daily" || trimmed == "@midnight"
+            || trimmed == "@weekly" || trimmed == "@monthly" || trimmed == "@yearly"
+            || trimmed == "@annually" || trimmed == "@reboot" {
+            let s: CronSchedule = parse_cron_expression(trimmed);
+            return CronValidation { is_valid: true, error_message: "", calendar_spec: s.systemd_calendar };
+        }
+        return CronValidation { is_valid: false, error_message: "Unknown macro: " + trimmed, calendar_spec: "" };
+    }
+    let tokens: List[String] = split_words(trimmed);
+    if list_len(tokens) < 5 {
+        return CronValidation {
+            is_valid: false,
+            error_message: "Incomplete cron schedule (requires 5 fields: min hour dom month dow)",
+            calendar_spec: ""
+        };
+    }
+    let s: CronSchedule = parse_cron_expression(trimmed);
+    return CronValidation { is_valid: true, error_message: "", calendar_spec: s.systemd_calendar };
+}

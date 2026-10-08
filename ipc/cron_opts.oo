@@ -1,0 +1,108 @@
+// # oocron CLI Options Parser
+//
+// Logline: Argument parser mapping CLI switches to CronConfig and dispatching conversion modes.
+//
+// Setup: Parses raw command line arguments into structured configuration records.
+//
+// Beats:
+//   1. Declare ParsedCron container holding CronConfig and dispatch flags.
+//   2. Process conversion, validation, and demo mode triggers.
+//   3. Extract cron schedule expressions, unit names, and executable commands.
+//   4. Deliver standard usage help text.
+
+import "core/cron_types.oo";
+
+type ParsedCron = struct {
+    config: CronConfig,
+    show_help: Bool,
+    show_version: Bool,
+    run_mcp: Bool,
+    parse_error: String
+};
+
+pub fn parse_cron_args(args: List[String]) -> ParsedCron {
+    let mut cfg: CronConfig = default_cron_config();
+    let mut show_help: Bool = false;
+    let mut show_version: Bool = false;
+    let mut run_mcp: Bool = false;
+    let mut parse_error: String = "";
+
+    let num_args: Int = list_len(args);
+    let mut i: Int = 0;
+    while i < num_args {
+        let arg: String = list_get(args, i);
+        if arg == "-h" || arg == "--help" {
+            show_help = true;
+        } else if arg == "-v" || arg == "--version" {
+            show_version = true;
+        } else if arg == "--mcp" {
+            run_mcp = true;
+        } else if arg == "-e" || arg == "-s" || arg == "--expr" || arg == "--schedule" {
+            if i + 1 < num_args {
+                i = i + 1;
+                cfg.cron_expr = list_get(args, i);
+            } else {
+                parse_error = "--expr requires a cron timing string";
+            }
+        } else if arg == "-c" || arg == "--cmd" || arg == "--command" {
+            if i + 1 < num_args {
+                i = i + 1;
+                cfg.command = list_get(args, i);
+            } else {
+                parse_error = "--cmd requires an executable command string";
+            }
+        } else if arg == "-u" || arg == "--unit" || arg == "--name" {
+            if i + 1 < num_args {
+                i = i + 1;
+                cfg.unit_name = list_get(args, i);
+            } else {
+                parse_error = "--unit requires a unit name";
+            }
+        } else if arg == "--validate" || arg == "-V" {
+            cfg.action = "validate";
+        } else if arg == "--test" {
+            cfg.action = "test";
+        } else if arg == "-d" || arg == "--demo" {
+            cfg.demo_mode = true;
+        } else if arg == "-j" || arg == "--json" {
+            cfg.json_output = true;
+        } else if arg == "--theme" {
+            if i + 1 < num_args {
+                i = i + 1;
+                cfg.theme = list_get(args, i);
+            }
+        } else if str_starts_with(arg, "-") {
+            parse_error = "Unknown option: " + arg;
+        } else if chars_len(cfg.cron_expr) == 0 {
+            cfg.cron_expr = arg;
+        } else {
+            cfg.command = arg;
+        }
+        i = i + 1;
+    }
+
+    return ParsedCron {
+        config: cfg,
+        show_help: show_help,
+        show_version: show_version,
+        run_mcp: run_mcp,
+        parse_error: parse_error
+    };
+}
+
+pub fn render_cron_help() -> String {
+    let mut out: String = "Usage: oocron [OPTIONS] [CRON_EXPR] [COMMAND]\n\n";
+    out = out + "Pure systemd timer scheduler replacing legacy cron with journald integration.\n\n";
+    out = out + "Options:\n";
+    out = out + "  -e, --expr <EXPR>      Specify cron schedule expression (e.g. '*/5 * * * *', '@daily')\n";
+    out = out + "      --cmd <COMMAND>    Executable command line to run in synthesized oneshot service\n";
+    out = out + "      --unit <NAME>      Base name for systemd unit pair (default: 'oocron-job')\n";
+    out = out + "  -V, --validate         Validate cron syntax and display systemd OnCalendar spec\n";
+    out = out + "  -d, --demo             Showcase production cron conversions across 4 sample jobs\n";
+    out = out + "  -j, --json             Output structured JSON\n";
+    out = out + "      --theme <THEME>    Select terminal color theme (ember, ocean, matrix, cyber, monochrome)\n";
+    out = out + "      --mcp              Run streaming MCP JSON-RPC 2.0 server on stdio\n";
+    out = out + "  -h, --help             Show this help message and exit\n";
+    out = out + "  -v, --version          Show version information and exit\n";
+    return out;
+}

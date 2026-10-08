@@ -1,18 +1,18 @@
-# oocron: Sovereign TIMER SCHEDULER
+# oocron: Sovereign Systemd Timer Scheduler & Transpiler
 
 <div align="center">
 
 ```
 ================================================================================
-                                oocron
-               Sovereign openOODA TIMER SCHEDULER
+                                 oocron
+              Sovereign openOODA Systemd Timer Scheduler
 ================================================================================
 ```
 
-**Sovereign TIMER SCHEDULER**  
+**Sovereign Systemd Timer Scheduler & Transpiler**  
 *Pure systemd timer scheduler replacing legacy cron with journald integration.*  
-*Two Faces, One Engine:* Modern terminal ergonomics for humans • Zero-leakage MCP for AI agents  
-Written in 100% pure [openOODA](https://github.com/openOODA).
+*Two Faces, One Engine:* Modern terminal ergonomics for humans • Streaming MCP stdio for AI agents  
+Written in 100% pure native [openOODA](https://github.com/openOODA).
 
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![openOODA](https://img.shields.io/badge/openOODA-1.0-emerald.svg)](https://openooda.org)
@@ -54,32 +54,43 @@ oocron-uninstall
 ## 2. CLI Usage
 
 ```
-usage: oocron [options] [ARGUMENTS]...
+Usage: oocron [OPTIONS] [CRON_EXPR] [COMMAND]
 
 Pure systemd timer scheduler replacing legacy cron with journald integration.
 
 Options:
-  -h, --help           display this help and exit
-  -v, --version        output version information and exit
-      --json           output formatted as JSON Lines
-      --color <WHEN>   colorize output: auto, always, never [default: auto]
-      --theme <NAME>   override active oote palette
-      --mcp            run as Model Context Protocol stdio server
+  -e, -s, --expr, --schedule <EXPR>  Specify cron schedule expression (e.g. '*/5 * * * *', '@daily')
+  -c, --cmd, --command <COMMAND>     Executable command line to run in synthesized oneshot service
+  -u, --unit, --name <NAME>          Base name for systemd unit pair (default: 'oocron-job')
+  -V, --validate                     Validate cron syntax and display systemd OnCalendar spec
+  -d, --demo                         Showcase production cron conversions across 4 sample jobs
+  -j, --json                         Output structured JSON
+      --theme <THEME>                Select terminal color theme (ember, ocean, matrix, cyber, monochrome)
+      --mcp                          Run streaming MCP JSON-RPC 2.0 server on stdio
+  -h, --help                         Show this help message and exit
+  -v, --version                      Show version information and exit
 ```
 
 ---
 
-## 3. Theming Integration (`oote`)
+## 3. Pure Systemd-Native Philosophy
 
-`oocron` synchronizes visual styles and status colors with [oote](https://github.com/openOODA-tools/oote):
-* **Configuration:** Reads active palette from `~/.openooda/theme.oot`.
-* **Environment Overrides:** Respects `$OODA_THEME` and `$NO_COLOR`.
+Adhering strictly to modern Linux infrastructure guidelines:
+* **Declarative System Units**: Transpiles 5-field cron schedules and macros (`@reboot`, `@hourly`, `@daily`, `@weekly`, `@monthly`, `@yearly`) to native `.timer` and `.service` unit files in `/etc/systemd/system/`.
+* **Zero Legacy Crond**: Eliminates background cron daemons, mail spoolers, and unconfined crontabs.
+* **Service Hardening & Confinement**: Every generated oneshot service enforces `ProtectSystem=strict`, `ProtectHome=read-only`, `PrivateTmp=true`, and `NoNewPrivileges=true`.
+* **Journald Logging**: Logging routes exclusively to `systemd-journald` (`StandardOutput=journal`, `StandardError=journal`).
 
 ---
 
 ## 4. Model Context Protocol (MCP)
 
-When invoked with `--mcp`, `oocron` runs a JSON-RPC 2.0 stdio server providing structured tools for AI coding agents:
+When invoked with `--mcp`, `oocron` runs a JSON-RPC 2.0 stdio server providing four sovereign scheduling tools:
+
+* `cron_to_systemd`: Transpile a cron schedule and command into declarative systemd timer and service units.
+* `cron_validate`: Validate cron schedule syntax and compute the systemd `OnCalendar` equivalent.
+* `cron_macros`: List standard cron macros and their systemd calendar mappings.
+* `cron_demo`: Return synthetic multi-schedule cron to systemd unit showcase.
 
 ```bash
 oocron --mcp
@@ -89,9 +100,9 @@ oocron --mcp
 
 ## 5. Security & Zero Ambient Authority
 
-* **Pure Capability Bounded:** Operates strictly with explicit tokens (&TermCap, &EnvCap, &ProcCap, &McpCap). Physical absence of ambient disk/net leakage.
-* **Negative-Trust Architecture:** Strict input validation and operational limits.
-* **Hermetic Binary:** Standalone zero-dependency executable.
+* **Pure Capability Bounded**: Operates strictly with explicit tokens (`&FsReadCap`, `&ProcessCap`, `&EnvCap`). Physical absence of ambient authority.
+* **Negative-Trust Architecture**: Complete syntax validation and bounds checking on minute, hour, day-of-month, month, and day-of-week fields.
+* **Hermetic Binary**: Standalone zero-dependency executable compiled via `oodac`.
 
 ---
 

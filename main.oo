@@ -1,52 +1,110 @@
 // # oocron Main Entry Point
 //
-// Logline: Pure systemd timer scheduler replacing legacy cron with journald integration.
+// Logline: Sovereign systemd timer scheduler and cron transpiler replacing legacy crond with journald integration.
 //
-// Setup: Demands explicit capability tokens and standard argument list.
+// Setup: Demands &FsReadCap, &ProcessCap, and &EnvCap tokens for capability-bounded systemd generation.
 //
 // Beats:
 //   1. Parse command-line options and dispatch --help, --version, or --mcp.
-//   2. Execute capability-bounded oocron operations.
-//   3. Format and output structured results to standard output.
+//   2. Dispatch synthetic demo execution when --demo is specified.
+//   3. Dispatch schedule validation when --validate is active.
+//   4. Transpile cron expressions to hardened systemd timer and service unit pairs.
 
-fn render_help() -> String {
-    return "oocron 0.1.0 (openOODA sovereign shell & terminal)\n"
-        + "usage: oocron [options] [ARGUMENTS]...\n\n"
-        + "Pure systemd timer scheduler replacing legacy cron with journald integration.\n\n"
-        + "Options:\n"
-        + "  -h, --help           display this help and exit\n"
-        + "  -v, --version        output version information and exit\n"
-        + "      --json           output formatted as JSON Lines\n"
-        + "      --color <WHEN>   colorize output: auto, always, never [default: auto]\n"
-        + "      --theme <NAME>   override active oote palette\n"
-        + "      --mcp            run as Model Context Protocol stdio server\n";
-}
+import "core/cron_types.oo";
+import "core/cron_parser.oo";
+import "core/cron_systemd.oo";
+import "core/cron_demo.oo";
+import "render/cron_theme.oo";
+import "render/cron_view.oo";
+import "render/cron_json.oo";
+import "ipc/cron_opts.oo";
+import "ipc/mcp_serve.oo";
+import "anchor.oo";
 
 fn render_version() -> String {
-    return "oocron 0.1.0 (openOODA sovereign shell & terminal)\n";
+    return "oocron 0.2.0 (openOODA sovereign systemd scheduler)\n";
 }
 
-fn main(args: List[String]) -> Int {
-    let num_args: Int = list_len(args);
-    let mut i: Int = 0;
+fn main(
+    fr: &FsReadCap,
+    pr: &ProcessCap,
+    env: &EnvCap,
+    args: List[String]
+) -> Int {
+    let parsed: ParsedCron = parse_cron_args(args);
 
-    while i < num_args {
-        let arg: String = list_get(args, i);
-        if arg == "-h" || arg == "--help" {
-            print(render_help());
-            return 0;
-        }
-        if arg == "-v" || arg == "--version" {
-            print(render_version());
-            return 0;
-        }
-        if arg == "--mcp" {
-            print("{\"jsonrpc\":\"2.0\",\"result\":{\"status\":\"ready\",\"tool\":\"oocron\"}}\n");
-            return 0;
-        }
-        i = i + 1;
+    if parsed.show_help {
+        print(render_cron_help());
+        return 0;
     }
 
-    print("oocron: sovereign capability-bounded utility ready\n");
+    if parsed.show_version {
+        print(render_version());
+        return 0;
+    }
+
+    if parsed.run_mcp {
+        run_mcp_server(fr);
+        return 0;
+    }
+
+    if chars_len(parsed.parse_error) > 0 {
+        print("oocron: " + parsed.parse_error + "\nTry 'oocron --help' for more information.\n");
+        return 1;
+    }
+
+    let th: ThemePalette = get_theme(parsed.config.theme);
+
+    if parsed.config.action == "test" {
+        if !run_all_tests() {
+            print("oocron: internal anchor tests FAILED\n");
+            return 1;
+        }
+        print("oocron: internal anchor tests PASSED\n");
+        return 0;
+    }
+
+    if parsed.config.demo_mode {
+        let demo_pairs: List[SystemdUnitPair] = build_demo_jobs();
+        if parsed.config.json_output {
+            print(demo_to_json(demo_pairs) + "\n");
+        } else {
+            print(render_demo_view(demo_pairs, th));
+        }
+        return 0;
+    }
+
+    if parsed.config.action == "validate" {
+        let expr: String = if chars_len(parsed.config.cron_expr) > 0 {
+            parsed.config.cron_expr
+        } else {
+            "* * * * *"
+        };
+        let val: CronValidation = validate_cron_expression(expr);
+        if parsed.config.json_output {
+            print(validation_to_json(val, expr) + "\n");
+        } else {
+            print(render_validation_report(val, expr, th));
+        }
+        return if val.is_valid { 0 } else { 1 };
+    }
+
+    if chars_len(parsed.config.cron_expr) == 0 {
+        print("oocron: missing cron timing expression\nTry 'oocron --help' or 'oocron --demo' for more information.\n");
+        return 1;
+    }
+
+    let pair: SystemdUnitPair = transpile_cron_to_systemd(
+        parsed.config.cron_expr,
+        parsed.config.command,
+        parsed.config.unit_name
+    );
+
+    if parsed.config.json_output {
+        print(unit_pair_to_json(pair) + "\n");
+    } else {
+        print(render_unit_pair(pair, th));
+    }
+
     return 0;
 }

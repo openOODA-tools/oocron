@@ -1,0 +1,8 @@
+Package: oocron
+Version: 0.2.0-1
+Section: utils
+Priority: optional
+Architecture: amd64
+Maintainer: openOODA-tools <ops@openooda.org>
+Description: Pure systemd timer scheduler replacing legacy cron with journald integration in pure openOODA.
+ Transpiles cron schedules into hardened systemd timer and service units with dual-surface CLI and MCP server.

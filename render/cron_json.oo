@@ -1,0 +1,78 @@
+// # oocron JSON Serialization Subsystem
+//
+// Logline: Serializes systemd unit definitions, cron validation states, and demo telemetry to valid JSON streams.
+//
+// Setup: Pure string manipulation routines formatting structured JSON without external dependencies.
+//
+// Beats:
+//   1. Escape strings for compliant JSON encoding.
+//   2. Serialize SystemdUnitPair objects into JSON structures.
+//   3. Serialize CronValidation results into machine-readable status objects.
+//   4. Serialize multi-job demonstration suites.
+
+import "core/cron_types.oo";
+
+fn json_esc(s: String) -> String {
+    let mut out: String = "";
+    let n: Int = chars_len(s);
+    let mut i: Int = 0;
+    while i < n {
+        let ch: Int = byte_at(s, i);
+        if ch == 34 {
+            out = out + "\\\"";
+        } else if ch == 92 {
+            out = out + "\\\\";
+        } else if ch == 10 {
+            out = out + "\\n";
+        } else if ch == 13 {
+            out = out + "\\r";
+        } else if ch == 9 {
+            out = out + "\\t";
+        } else {
+            out = out + str_slice(s, i, i + 1);
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn unit_pair_to_json(pair: SystemdUnitPair) -> String {
+    let mut out: String = "{\n";
+    out = out + "  \"name\": \"" + pair.name + "\",\n";
+    out = out + "  \"timer_path\": \"" + pair.timer_path + "\",\n";
+    out = out + "  \"service_path\": \"" + pair.service_path + "\",\n";
+    out = out + "  \"timer_content\": \"" + json_esc(pair.timer_content) + "\",\n";
+    out = out + "  \"service_content\": \"" + json_esc(pair.service_content) + "\"\n";
+    out = out + "}";
+    return out;
+}
+
+pub fn validation_to_json(val: CronValidation, raw_expr: String) -> String {
+    let mut out: String = "{\n";
+    out = out + "  \"input\": \"" + raw_expr + "\",\n";
+    out = out + "  \"is_valid\": " + (if val.is_valid { "true" } else { "false" }) + ",\n";
+    out = out + "  \"calendar_spec\": \"" + val.calendar_spec + "\",\n";
+    out = out + "  \"error\": \"" + val.error_message + "\"\n";
+    out = out + "}";
+    return out;
+}
+
+pub fn demo_to_json(pairs: List[SystemdUnitPair]) -> String {
+    let mut out: String = "{\n";
+    out = out + "  \"tool\": \"oocron\",\n";
+    out = out + "  \"version\": \"0.2.0\",\n";
+    out = out + "  \"jobs\": [\n";
+    let n: Int = list_len(pairs);
+    let mut i: Int = 0;
+    while i < n {
+        let p: SystemdUnitPair = list_get(pairs, i);
+        out = out + "    " + unit_pair_to_json(p);
+        if i + 1 < n {
+            out = out + ",";
+        }
+        out = out + "\n";
+        i = i + 1;
+    }
+    out = out + "  ]\n}";
+    return out;
+}

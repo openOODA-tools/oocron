@@ -1,0 +1,128 @@
+// # oocron IPC Subsystem Unit Tests
+//
+// Logline: Verification anchors for CLI argument processing and MCP JSON-RPC protocol handlers.
+//
+// Setup: Executes deterministic tests on JSON parsing and argument normalization.
+//
+// Beats:
+//   1. Verify JSON escaping and field extraction routines.
+//   2. Verify CLI flag mapping to CronConfig state.
+//   3. Verify MCP initialize and tools/list protocol frames.
+//   4. Export unified IPC test harness.
+
+import "core/cron_types.oo";
+import "ipc/json_field.oo";
+import "ipc/cron_opts.oo";
+import "ipc/mcp_serve.oo";
+
+pub fn test_json_helpers() -> Bool {
+    let esc: String = json_escape("line1\n\"quotes\"");
+    if !str_contains(esc, "\\\"quotes\\\"") {
+        return false;
+    }
+    if !str_contains(esc, "\\n") {
+        return false;
+    }
+
+    let payload: String = "{\"schedule\":\"0 0 * * *\",\"unit\":\"backup\",\"persistent\":true}";
+    let sched: String = extract_json_str(payload, "schedule");
+    if sched != "0 0 * * *" {
+        return false;
+    }
+    let unit: String = extract_json_str(payload, "unit");
+    if unit != "backup" {
+        return false;
+    }
+    let is_pers: Bool = extract_json_bool(payload, "persistent", false);
+    if !is_pers {
+        return false;
+    }
+
+    return true;
+}
+
+pub fn test_cli_parsing() -> Bool {
+    let mut args: List[String] = list_push(list_new(), "-s");
+    args = list_push(args, "0 0 * * *");
+    args = list_push(args, "-u");
+    args = list_push(args, "daily-backup");
+    args = list_push(args, "-c");
+    args = list_push(args, "/usr/bin/backup");
+    args = list_push(args, "-j");
+    args = list_push(args, "--theme");
+    args = list_push(args, "amber");
+
+    let parsed: ParsedCron = parse_cron_args(args);
+    if parsed.config.cron_expr != "0 0 * * *" {
+        return false;
+    }
+    if parsed.config.unit_name != "daily-backup" {
+        return false;
+    }
+    if parsed.config.command != "/usr/bin/backup" {
+        return false;
+    }
+    if !parsed.config.json_output {
+        return false;
+    }
+    if parsed.config.theme != "amber" {
+        return false;
+    }
+
+    let mut demo_args: List[String] = list_push(list_new(), "--demo");
+    let parsed_demo: ParsedCron = parse_cron_args(demo_args);
+    if !parsed_demo.config.demo_mode {
+        return false;
+    }
+
+    let mut val_args: List[String] = list_push(list_new(), "--validate");
+    val_args = list_push(val_args, "*/15 * * * *");
+    let parsed_val: ParsedCron = parse_cron_args(val_args);
+    if parsed_val.config.action != "validate" {
+        return false;
+    }
+    if parsed_val.config.cron_expr != "*/15 * * * *" {
+        return false;
+    }
+
+    return true;
+}
+
+pub fn test_mcp_frames() -> Bool {
+    let init_resp: String = render_mcp_init("\"cron-init\"");
+    if !str_contains(init_resp, "oocron") {
+        return false;
+    }
+    if !str_contains(init_resp, "2024-11-05") {
+        return false;
+    }
+
+    let list_resp: String = render_mcp_tools_list("\"cron-list\"");
+    if !str_contains(list_resp, "cron_to_systemd") {
+        return false;
+    }
+    if !str_contains(list_resp, "cron_validate") {
+        return false;
+    }
+    if !str_contains(list_resp, "cron_macros") {
+        return false;
+    }
+    if !str_contains(list_resp, "cron_demo") {
+        return false;
+    }
+
+    return true;
+}
+
+pub fn run_ipc_tests() -> Bool {
+    if !test_json_helpers() {
+        return false;
+    }
+    if !test_cli_parsing() {
+        return false;
+    }
+    if !test_mcp_frames() {
+        return false;
+    }
+    return true;
+}

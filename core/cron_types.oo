@@ -1,0 +1,67 @@
+// # oocron Core Data Types
+//
+// Logline: Data structures defining cron expressions, systemd timer/service units, validation states, and CLI/MCP configurations.
+//
+// Setup: Imported by cron_parser, cron_systemd, cron_demo, renderers, and CLI/MCP harnesses.
+//
+// Beats:
+//   1. Declare CronSchedule representing 5-part cron timing specifications and macros.
+//   2. Declare SystemdUnitPair holding generated .timer and .service unit definitions.
+//   3. Declare CronJob and CronValidation records.
+//   4. Declare CronConfig container and export default initializers.
+
+type CronSchedule = struct {
+    raw_expr: String,
+    minute: String,
+    hour: String,
+    dom: String,
+    month: String,
+    dow: String,
+    systemd_calendar: String,
+    is_macro: Bool
+};
+
+type SystemdUnitPair = struct {
+    name: String,
+    timer_content: String,
+    service_content: String,
+    timer_path: String,
+    service_path: String
+};
+
+type CronJob = struct {
+    name: String,
+    schedule: CronSchedule,
+    command: String,
+    user: String
+};
+
+type CronValidation = struct {
+    is_valid: Bool,
+    error_message: String,
+    calendar_spec: String
+};
+
+type CronConfig = struct {
+    action: String,
+    cron_expr: String,
+    command: String,
+    unit_name: String,
+    file_path: String,
+    json_output: Bool,
+    demo_mode: Bool,
+    theme: String
+};
+
+pub fn default_cron_config() -> CronConfig {
+    return CronConfig {
+        action: "convert",
+        cron_expr: "",
+        command: "/usr/bin/true",
+        unit_name: "oocron-job",
+        file_path: "",
+        json_output: false,
+        demo_mode: false,
+        theme: "default"
+    };
+}

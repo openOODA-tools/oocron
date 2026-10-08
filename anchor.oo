@@ -1,13 +1,28 @@
-// # oocron Root Anchor
+// # oocron Root Verification Anchor
 //
-// Logline: Top-level anchor re-exporting options, core logic, render, and ipc subsystems.
+// Logline: Unified test runner aggregating verification anchors from core, render, and ipc subsystems.
 //
-// Setup: Pure shim re-exporting all oocron subsystem anchors.
+// Setup: Demands no ambient authority; invokes deterministic subsystem test routines.
 //
 // Beats:
-//   1. Re-export options parsing subsystem.
-//   2. Re-export core oocron execution engine.
-//   3. Re-export render formatting subsystem.
-//   4. Re-export Model Context Protocol (MCP) IPC subsystem.
+//   1. Execute core cron parsing, validation, and systemd unit generation checks.
+//   2. Execute render theme palettes, view layouts, and JSON serialization tests.
+//   3. Execute ipc CLI argument parsing and MCP protocol tests.
+//   4. Return aggregate boolean test result.
 
-import "main.oo";
+import "core/anchor.oo";
+import "render/anchor.oo";
+import "ipc/anchor.oo";
+
+pub fn run_all_tests() -> Bool {
+    if !run_core_tests() {
+        return false;
+    }
+    if !run_render_tests() {
+        return false;
+    }
+    if !run_ipc_tests() {
+        return false;
+    }
+    return true;
+}

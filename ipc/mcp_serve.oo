@@ -1,0 +1,134 @@
+// # oocron Streaming MCP Server
+//
+// Logline: JSON-RPC 2.0 stdio server exposing sovereign cron transpilation, systemd unit generation, and validation tools.
+//
+// Setup: Bridges standard input/output streaming JSON-RPC to the CronEngine using bounded capability tokens.
+//
+// Beats:
+//   1. Handle MCP initialize handshake with server metadata.
+//   2. Expose tools/list catalogue with four sovereign cron/systemd tools.
+//   3. Dispatch tools/call for cron_to_systemd, cron_validate, cron_macros, and cron_demo.
+//   4. Deliver streaming JSON-RPC responses over standard output.
+
+import "core/cron_types.oo";
+import "core/cron_parser.oo";
+import "core/cron_systemd.oo";
+import "core/cron_demo.oo";
+import "render/cron_json.oo";
+import "ipc/json_field.oo";
+
+fn build_error(id: String, code: Int, msg: String) -> String {
+    return "{\"jsonrpc\":\"2.0\",\"id\":" + id + ",\"error\":{\"code\":"
+        + to_string(code) + ",\"message\":\"" + json_escape(msg) + "\"}}\n";
+}
+
+fn build_tool_result(id: String, text: String) -> String {
+    return "{\"jsonrpc\":\"2.0\",\"id\":" + id + ",\"result\":{\"content\":[{\"type\":\"text\",\"text\":\""
+        + json_escape(text) + "\"}]}}\n";
+}
+
+pub fn render_mcp_init(id: String) -> String {
+    return "{\"jsonrpc\":\"2.0\",\"id\":" + id
+        + ",\"result\":{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{\"tools\":{}},\"serverInfo\":{\"name\":\"oocron\",\"version\":\"0.2.0\"}}}\n";
+}
+
+pub fn render_mcp_tools_list(id: String) -> String {
+    let mut out: String = "{\"jsonrpc\":\"2.0\",\"id\":" + id + ",\"result\":{\"tools\":[";
+    out = out + "{\"name\":\"cron_to_systemd\",\"description\":\"Transpile a cron schedule and command into declarative systemd timer and service units.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"expression\":{\"type\":\"string\"},\"command\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"}},\"required\":[\"expression\"]}},";
+    out = out + "{\"name\":\"cron_validate\",\"description\":\"Validate cron schedule syntax and compute systemd OnCalendar equivalent.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"expression\":{\"type\":\"string\"}},\"required\":[\"expression\"]}},";
+    out = out + "{\"name\":\"cron_macros\",\"description\":\"List standard cron macros and their systemd calendar mappings.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{}}},";
+    out = out + "{\"name\":\"cron_demo\",\"description\":\"Return synthetic multi-schedule cron to systemd unit showcase.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{}}}";
+    out = out + "]}}\n";
+    return out;
+}
+
+pub fn handle_mcp_call(
+    fr: &FsReadCap,
+    id: String,
+    tool_name: String,
+    req: String
+) -> String {
+    if tool_name == "cron_to_systemd" {
+        let expr: String = extract_json_str(req, "expression");
+        let cmd: String = extract_json_str(req, "command");
+        let name: String = extract_json_str(req, "name");
+        let active_cmd: String = if chars_len(cmd) > 0 { cmd } else { "/usr/bin/true" };
+        let active_name: String = if chars_len(name) > 0 { name } else { "cron-task" };
+
+        let pair: SystemdUnitPair = transpile_cron_to_systemd(expr, active_cmd, active_name);
+        return build_tool_result(id, unit_pair_to_json(pair));
+    }
+
+    if tool_name == "cron_validate" {
+        let expr: String = extract_json_str(req, "expression");
+        let v: CronValidation = validate_cron_expression(expr);
+        return build_tool_result(id, validation_to_json(v, expr));
+    }
+
+    if tool_name == "cron_macros" {
+        let out: String = "{\"macros\":[{\"macro\":\"@hourly\",\"calendar\":\"*-*-* *:00:00\"},{\"macro\":\"@daily\",\"calendar\":\"*-*-* 00:00:00\"},{\"macro\":\"@weekly\",\"calendar\":\"Mon *-*-* 00:00:00\"},{\"macro\":\"@monthly\",\"calendar\":\"*-*-01 00:00:00\"},{\"macro\":\"@yearly\",\"calendar\":\"*-01-01 00:00:00\"},{\"macro\":\"@reboot\",\"calendar\":\"OnBootSec=1m\"}]}";
+        return build_tool_result(id, out);
+    }
+
+    if tool_name == "cron_demo" {
+        let demos: List[SystemdUnitPair] = build_demo_jobs();
+        return build_tool_result(id, demo_to_json(demos));
+    }
+
+    return build_error(id, -32601, "Unknown tool: " + tool_name);
+}
+
+pub fn handle_mcp_message(fr: &FsReadCap, req: String) -> String {
+    let id_str: String = extract_json_str(req, "id");
+    let id: String = if chars_len(id_str) > 0 { "\"" + id_str + "\"" } else { "1" };
+    let method: String = extract_json_str(req, "method");
+
+    if method == "initialize" {
+        return render_mcp_init(id);
+    }
+    if method == "notifications/initialized" {
+        return "";
+    }
+    if method == "tools/list" {
+        return render_mcp_tools_list(id);
+    }
+    if method == "tools/call" {
+        let tool_name: String = extract_json_str(req, "name");
+        return handle_mcp_call(fr, id, tool_name, req);
+    }
+    if method == "shutdown" {
+        return "{\"jsonrpc\":\"2.0\",\"id\":" + id + ",\"result\":null}\n";
+    }
+    return build_error(id, -32601, "Method not found: " + method);
+}
+
+pub fn run_mcp_server(fr: &FsReadCap) {
+    let mut buf: String = "";
+    let mut running: Bool = true;
+    while running {
+        let r: Result[String, String] = oo_read_stdin_chunk(fr, 4096);
+        if !r.is_ok() {
+            running = false;
+        } else {
+            let chunk: String = match r { Ok(s) => s, Err(_) => "" };
+            if chars_len(chunk) == 0 {
+                running = false;
+            } else {
+                buf = buf + chunk;
+                let mut nl_pos: Int = str_index_of(buf, "\n");
+                while nl_pos >= 0 {
+                    let line: String = str_slice(buf, 0, nl_pos);
+                    buf = str_slice(buf, nl_pos + 1, chars_len(buf));
+                    let trimmed: String = str_trim(line);
+                    if chars_len(trimmed) > 0 {
+                        let resp: String = handle_mcp_message(fr, trimmed);
+                        if chars_len(resp) > 0 {
+                            print(resp);
+                        }
+                    }
+                    nl_pos = str_index_of(buf, "\n");
+                }
+            }
+        }
+    }
+}
